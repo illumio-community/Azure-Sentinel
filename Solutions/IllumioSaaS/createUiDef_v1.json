@@ -1,0 +1,179 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "resourceTypes": [
+      "Microsoft.Web/sites",
+      "Microsoft.Storage/storageAccounts"
+    ],
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "Deploy the Sentinel Flow Processor Function App, which serves cached Illumio inventory from a Sentinel data lake snapshot.",
+        "subscription": {
+          "resourceProviders": [
+            "Microsoft.Web",
+            "Microsoft.Storage",
+            "Microsoft.Insights",
+            "Microsoft.OperationalInsights"
+          ]
+        },
+        "resourceGroup": {
+          "constraints": {
+            "validations": []
+          },
+          "allowExisting": true
+        },
+        "location": {
+          "label": "Region",
+          "toolTip": "Region where all resources will be deployed.",
+          "resourceTypes": [
+            "Microsoft.Web/sites"
+          ]
+        }
+      }
+    },
+    "basics": [],
+    "steps": [
+      {
+        "name": "functionApp",
+        "label": "Function App",
+        "elements": [
+          {
+            "name": "functionAppName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Function App Name",
+            "toolTip": "Globally unique name for the Azure Function App (2-60 characters, letters, numbers, hyphens).",
+            "placeholder": "sentinel-inventory-func",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[a-zA-Z0-9][a-zA-Z0-9-]{0,58}[a-zA-Z0-9]$",
+                  "message": "Must be 2-60 characters: letters, numbers, and hyphens. Cannot start or end with a hyphen."
+                }
+              ]
+            }
+          },
+          {
+            "name": "storageAccountName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Storage Account Name",
+            "toolTip": "Globally unique name for the Storage Account used by the Function App (3-24 lowercase letters and numbers only).",
+            "placeholder": "sentinelflowstorage",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[a-z0-9]{3,24}$",
+                  "message": "Must be 3-24 characters: lowercase letters and numbers only."
+                }
+              ]
+            }
+          },
+          {
+            "name": "uniqueResourcesTableName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Unique Resources Table Name",
+            "toolTip": "Name of the Sentinel table that holds unique cloud resource records (e.g. UniqueResources_v1_SPRK).",
+            "defaultValue": "UniqueResources_v1_SPRK",
+            "placeholder": "UniqueResources_v1_SPRK",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[A-Za-z0-9_]{1,100}$",
+                  "message": "Must be 1-100 characters: letters, numbers, and underscores."
+                }
+              ]
+            }
+          },
+          {
+            "name": "enablePrivateNetworking",
+            "type": "Microsoft.Common.CheckBox",
+            "label": "Enable Private Networking",
+            "toolTip": "Disable public internet access to the Storage Account. Requires VNet integration to be configured after deployment.",
+            "defaultValue": false
+          }
+        ]
+      },
+      {
+        "name": "sentinel",
+        "label": "Sentinel Connection",
+        "elements": [
+          {
+            "name": "queryEndpoint",
+            "type": "Microsoft.Common.TextBox",
+            "label": "KQL Query Endpoint",
+            "toolTip": "REST API URL for your Sentinel Log Analytics workspace, e.g. https://<workspace-id>.ods.opinsights.azure.com/v1/query",
+            "placeholder": "https://<workspace-id>.ods.opinsights.azure.com/v1/query",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^https://.+",
+                  "message": "Must be a valid HTTPS URL."
+                }
+              ]
+            }
+          },
+          {
+            "name": "sentinelWorkspace",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Sentinel Workspace Name",
+            "toolTip": "Name of the Microsoft Sentinel Log Analytics workspace.",
+            "placeholder": "my-sentinel-workspace",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[A-Za-z0-9_-]{1,100}$",
+                  "message": "Must be 1-100 characters: letters, numbers, hyphens, underscores."
+                }
+              ]
+            }
+          },
+          {
+            "name": "sentinelDatabase",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Sentinel Database Name",
+            "toolTip": "KQL database name for queries against the Sentinel workspace.",
+            "defaultValue": "sentinel",
+            "placeholder": "sentinel",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[A-Za-z0-9_-]{1,100}$",
+                  "message": "Must be 1-100 characters: letters, numbers, hyphens, underscores."
+                }
+              ]
+            }
+          },
+          {
+            "name": "oauthScope",
+            "type": "Microsoft.Common.TextBox",
+            "label": "OAuth Scope",
+            "toolTip": "OAuth 2.0 scope for the KQL REST API. Leave default unless using a custom AAD app.",
+            "defaultValue": "https://api.loganalytics.io/.default",
+            "constraints": {
+              "required": true
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "functionAppName": "[steps('functionApp').functionAppName]",
+      "storageAccountName": "[steps('functionApp').storageAccountName]",
+      "uniqueResourcesTableName": "[steps('functionApp').uniqueResourcesTableName]",
+      "enablePrivateNetworking": "[steps('functionApp').enablePrivateNetworking]",
+      "queryEndpoint": "[steps('sentinel').queryEndpoint]",
+      "sentinelWorkspace": "[steps('sentinel').sentinelWorkspace]",
+      "sentinelDatabase": "[steps('sentinel').sentinelDatabase]",
+      "oauthScope": "[steps('sentinel').oauthScope]",
+      "location": "[location()]"
+    }
+  }
+}
