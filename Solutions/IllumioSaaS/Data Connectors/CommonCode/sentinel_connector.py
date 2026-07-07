@@ -32,6 +32,7 @@ class AzureSentinelConnectorAsync:
         async with self.lock:
             self._queue.append(event)
             if len(self._queue) >= self.queue_size:
+                logging.warning("[Stage3] Queue reached %d events for stream %s — flushing batch", self.queue_size, self.stream_name)
                 events = list(self._queue)
                 self._queue.clear()
         if events:
@@ -39,6 +40,7 @@ class AzureSentinelConnectorAsync:
 
     # This method sends data to ingestion endpoint. Send whatever is accumulated till now.
     async def flush(self):
+        logging.warning("[Stage3] Flush called for stream %s — %d events in buffer", self.stream_name, len(self._queue))
         await self._flush(list(self._queue))
 
     # This method is a helper function which sends data to ingestion endpoint
@@ -56,12 +58,13 @@ class AzureSentinelConnectorAsync:
     # credential : string
     # data : List of dictionary
     async def _post_data(self, dce_endpoint, dcr_id, stream_name, credential, data):
+        logging.warning("[Stage3] Uploading %d events to Sentinel: DCE=%s, DCR=%s, stream=%s", len(data), dce_endpoint[:50], dcr_id[:20] if dcr_id else "None", stream_name)
         client = LogsIngestionClient(endpoint=dce_endpoint, credential=credential, logging_enable=True)
         async with client:
             try:
-                await client.upload(rule_id=dcr_id, stream_name=stream_name, logs=data)                
+                await client.upload(rule_id=dcr_id, stream_name=stream_name, logs=data)
+                logging.warning("[Stage3] SUCCESS — uploaded %d events to stream %s", len(data), stream_name)
             except HttpResponseError as e:
-                logging.error(f"Upload failed: {e.message}, status code is {e.status_code}")  
+                logging.error("[Stage3] FAILED — Upload failed: %s, status code is %s", e.message, e.status_code)
             except Exception as e:
-                # Handle any other exceptions
-                print(f"An unexpected error occurred: {str(e)}")                  
+                logging.error("[Stage3] FAILED — unexpected error: %s", str(e))                  

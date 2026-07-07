@@ -83,6 +83,7 @@ async def _generate_sentinel_connectors(session):
 
 async def main(msg: func.QueueMessage):
     try:
+        logging.warning("[Stage2] === QueueTriggerFuncApp START === (queue msg id: %s)", msg.id)
         total_events = 0
         accumulated_file_size = 0
         sqs_ids_seen_so_far = 0
@@ -91,11 +92,13 @@ async def main(msg: func.QueueMessage):
         # initialize sentinel_connectors
         async with aiohttp.ClientSession() as session:
             sentinel_connectors = await _generate_sentinel_connectors(session)
+        logging.warning("[Stage2] Sentinel connectors initialized for streams: %s", list(sentinel_connectors.keys()))
 
         # msg should contain a list of links to s3
         result = {"id": msg.id, "body": msg.get_body()}
         # body should be a list of dicts, where each dict has link, bucket_name, sqs_message_id
         body = json.loads(result["body"].decode("ascii").replace("'", '"'))
+        logging.warning("[Stage2] Queue message contains %d file references", len(body))
 
     except ValueError:
         pass
@@ -116,6 +119,7 @@ async def main(msg: func.QueueMessage):
                 if "auditable" in link
                 else FLOW_LOGS_CUSTOM_TABLE
             )
+            logging.warning("[Stage2] Processing file %d/%d: bucket=%s, key=%s, stream=%s", sqs_ids_seen_so_far, len(body), bucket, link, stream_name)
 
             file_stats = {
                 "Trigger": "Queue",
@@ -141,6 +145,7 @@ async def main(msg: func.QueueMessage):
                             )
 
         # ensure data is flushed at the end in case queue limit of 4000 is not reached
+        logging.warning("[Stage2] All files processed. Total events parsed: %d. Flushing to Sentinel...", total_events)
         for connector in sentinel_connectors.keys():
             await sentinel_connectors[connector].flush()
         event_stats = {
@@ -158,7 +163,9 @@ async def process_file(bucket, s3_path, client, sentinel_connector):
     event_count = 0
     s3_path = urllib.parse.unquote(s3_path)
 
+    logging.warning("[Stage2] Downloading from S3: s3://%s/%s", bucket, s3_path)
     response = await client.get_object(Bucket=bucket, Key=s3_path)
+    logging.warning("[Stage2] S3 download successful. Decompressing gzip stream...")
     s = ""
 
     async for decompressed_chunk in AsyncGZIPDecompressedStream(response["Body"]):
@@ -170,6 +177,7 @@ async def process_file(bucket, s3_path, client, sentinel_connector):
                     try:
                         event = json.loads(line)
                         event_count += 1
+                        logging.warning("[Stage2] Parsed event #%d: %s", event_count, json.dumps(event)[:200])
                     except ValueError as e:
                         logging.error(
                             "[QueueTrigger] Error while loading json Event at s value {}. Error: {}".format(

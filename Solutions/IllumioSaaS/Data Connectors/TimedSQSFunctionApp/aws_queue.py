@@ -159,6 +159,7 @@ def skip_processing_network_traffic_file(file_path, network_traffic_logs_to_cons
 # Can place upto 64kb per queue element, so in case, size is larger, split it into smaller chunks
 #
 async def enqueue_message_azure(mainQueueHelper, backlogQueueHelper, file_arr):
+    logging.warning("[Stage1] Enqueueing %d file references to Azure Storage Queue (size=%d bytes)", len(file_arr), get_string_size(file_arr))
     if len(file_arr) > 0:
         if (
             get_string_size(file_arr) >= AZURE_QUEUE_SIZE_PER_ELEMENT_LIMIT
@@ -183,6 +184,9 @@ async def main(mytimer: func.TimerRequest):
     """
 
     script_start_time = int(time.time())
+
+    logging.warning("[Stage1] === TimedSQSFunctionApp START ===")
+    logging.warning("[Stage1] Connecting to SQS queue: %s", SQS_QUEUE_URL)
 
     async with _create_sqs_client() as client:
         mainQueueHelper = AzureStorageQueueHelper(
@@ -210,9 +214,11 @@ async def main(mytimer: func.TimerRequest):
                 )
 
                 if "Messages" in response:  # this is an array
+                    logging.warning("[Stage1] Received %d messages from SQS", len(response["Messages"]))
                     for msg in response["Messages"]:
                         body_obj = json.loads(msg["Body"])
                         file_path, file_size, bucket_name = process_sqs_body(body_obj)
+                        logging.warning("[Stage1] SQS message -> S3 file: bucket=%s, key=%s, size=%s bytes", bucket_name, file_path, file_size)
 
                         if (
                             file_path is None
@@ -242,6 +248,7 @@ async def main(mytimer: func.TimerRequest):
                             continue
 
                         files_processed += 1
+                        logging.warning("[Stage1] ACCEPTED file #%d: %s (not skipped)", files_processed, file_path)
 
                         accumulated_file_size += file_size
 
@@ -315,8 +322,8 @@ async def main(mytimer: func.TimerRequest):
                             file_arr.clear()
 
                 else:
-                    logging.info(
-                        "[AWSQueue] There are no messages in SQS, attempting to enqueue files seen so far"
+                    logging.warning(
+                        "[Stage1] No more messages in SQS. Total files accepted: %d. Enqueueing to Azure Storage Queue...", files_processed
                     )
                     await enqueue_message_azure(
                         mainQueueHelper, backlogQueueHelper, file_arr
